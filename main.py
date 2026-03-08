@@ -39,7 +39,7 @@ def fetch_market_data():
         "up": 0, "down": 0, "flat": 0,
         "limit_up": 0, "limit_down": 0,
         "indices": [],
-        "date": now_bj.strftime("%Y-%m-%d %H:%M:%S")
+        "date": now_bj.strftime("%Y-%m-%d %H:%M") # 去掉秒数
     }
 
     # 1. 尝试获取详细统计 (包含涨停、跌停)
