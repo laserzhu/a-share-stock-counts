@@ -1,4 +1,4 @@
-name: Fetch A-Share Stock Counts
+name: 监测A股大盘行情
 
 on:
   workflow_dispatch:
