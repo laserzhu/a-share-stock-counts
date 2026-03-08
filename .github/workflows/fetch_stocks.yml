@@ -1,0 +1,26 @@
+name: Fetch A-Share Stock Counts
+
+on:
+  workflow_dispatch: # 开启手动触发按钮
+  schedule:
+    - cron: '0 8 * * 1-5' # 每个工作日北京时间 16:00 自动运行
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        env:
+          QYWECHAT_KEY: ${{ secrets.QYWECHAT_KEY }}
+        run: python main.py
