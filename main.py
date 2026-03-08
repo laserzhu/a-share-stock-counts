@@ -1,3 +1,23 @@
+import os
+import sys
+import subprocess
+
+# 自动安装缺失的库
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+try:
+    import requests
+    import chinesecalendar
+except ImportError:
+    print("正在安装缺失的依赖库...")
+    install('requests')
+    install('chinesecalendar')
+    import requests
+    import chinesecalendar
+
+import json
+from datetime import datetime, time, date
 import requests
 import json
 import os
