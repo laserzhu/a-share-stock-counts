@@ -130,7 +130,7 @@ def main():
             f"总计家数: {result['up'] + result['down'] + result['flat']}\n"
             f"涨停: <font color=\"warning\">{result['limit_up']}</font>  |  "
             f"跌停: <font color=\"info\">{result['limit_down']}</font>\n"
-            f"-----------------------------\n"
+            f"-----------------------\n"
         )
         
         # 2. 指数行情
@@ -138,21 +138,14 @@ def main():
         for idx in result['indices']:
             color = "warning" if (idx['pct'] or 0) > 0 else "info" if (idx['pct'] or 0) < 0 else "comment"
             index_text += f"{idx['name']}: {idx['price']} (<font color=\"{color}\">{idx['pct']}%</font>)\n"
-        index_text += f"-----------------------------\n"
+        index_text += f"-----------------------\n"
         
-        # 3. 运行规则和页脚
-        rules_text = (
-            f"**运行规则 (手动模式)**\n"
-            f"1. 抓取 A 股当前涨跌家数。\n"
-            f"2. 非交易日显示上个交易日数据。\n"
-        )
-        
+        # 3. 提示信息和查询时间
         trading_day_info = ""
         if not is_trading_time(current_date):
             trading_day_info = f"提示: 今天 ({current_date.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
         
         footer = (
-            f"{rules_text}"
             f"{trading_day_info}"
             f"查询时间: {result['date']}"
         )
