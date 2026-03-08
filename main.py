@@ -20,7 +20,7 @@ def fetch_stock_counts():
     }
     headers = {
         "Referer": "https://data.eastmoney.com/",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64 ) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
     try:
@@ -89,7 +89,7 @@ def send_wechat_notification(content, key):
     }
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
+        response = requests.post(url, headers=headers, data=json.dumps(payload ), timeout=10)
         if response.status_code == 200:
             print("企业微信通知发送成功。")
             print(f"响应内容: {response.text}")
@@ -100,8 +100,7 @@ def send_wechat_notification(content, key):
 
 def main():
     # 判断是否为手动触发 (workflow_dispatch) 或自动触发 (schedule)
-    # 在 GitHub Actions 中，可以通过环境变量 GITHUB_EVENT_NAME 来判断
-    event_name = os.environ.get("GITHUB_EVENT_NAME", "manual") # 默认为 manual
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "manual")
     
     current_date = date.today()
     
@@ -119,18 +118,18 @@ def main():
         
         trading_day_info = ""
         if not is_trading_time(current_date):
-            trading_day_info = f"提示: 今天 ({current_date.strftime("%Y-%m-%d")}) 是非交易日或非交易时间，将显示上一个交易日的数据。\n"
+            trading_day_info = f"提示: 今天 ({current_date.strftime('%Y-%m-%d')}) 是非交易日或非交易时间，将显示上一个交易日的数据。\n"
             print(trading_day_info)
         
         result = fetch_stock_counts()
         if result:
             output = (
                 f"### A股涨跌家数统计\n"
-                f"> **查询时间**: {result["date"]}\n"
-                f"> **上涨家数**: <font color=\"info\">{result["up"]}</font>\n"
-                f"> **下跌家数**: <font color=\"warning\">{result["down"]}</font>\n"
-                f"> **平盘家数**: {result["flat"]}</font>\n"
-                f"> **总计家数**: {result["up"] + result["down"] + result["flat"]}\n"
+                f"> **查询时间**: {result['date']}\n"
+                f"> **上涨家数**: <font color=\"info\">{result['up']}</font>\n"
+                f"> **下跌家数**: <font color=\"warning\">{result['down']}</font>\n"
+                f"> **平盘家数**: {result['flat']}\n"
+                f"> **总计家数**: {result['up'] + result['down'] + result['flat']}\n"
             )
             
             full_content = f"{rules_text}\n{trading_day_info}\n{output}"
@@ -144,36 +143,26 @@ def main():
     # 自动定时运行模式
     elif event_name == "schedule":
         if not is_trading_time(current_date):
-            print(f"今天 ({current_date.strftime("%Y-%m-%d")}) 是非交易日或非交易时间，跳过监测。")
+            print(f"今天 ({current_date.strftime('%Y-%m-%d')}) 是非交易日或非交易时间，跳过监测。")
             return
         
-        print(f"今天 ({current_date.strftime("%Y-%m-%d")}) 是交易日且在交易时间，开始监测...")
+        print(f"今天 ({current_date.strftime('%Y-%m-%d')}) 是交易日且在交易时间，开始监测...")
         result = fetch_stock_counts()
         if result:
             up_count = result["up"]
             down_count = result["down"]
             
             notification_needed = False
-            message = f"### A股情绪监测 ({result["date"]})\n"
+            message = f"### A股情绪监测 ({result['date']})\n"
             
             # 上涨预警
             if up_count >= UP_THRESHOLD:
-                # 计算当前上涨家数相对于阈值的增量
-                # 这里需要一个机制来存储上一次提醒的家数，以便判断是否增加了250家
-                # 由于 GitHub Actions 每次运行都是新的环境，直接在脚本中存储状态比较困难
-                # 简单的实现是每次达到阈值就提醒，或者需要将状态存储到外部（如文件、GitHub Issue、数据库等）
-                # 为了简化，目前只实现“超过3500提醒一次”，以及“每增加250家提醒”的首次触发
-                # 更精确的“每增加250家”需要外部状态存储，此处暂时简化为：
-                # 只要达到或超过阈值，并且是250的倍数（从3500开始），就提醒
-                
-                # 简化逻辑：如果上涨家数达到或超过3500，并且是3500 + N*250 的形式，就提醒
                 if (up_count - UP_THRESHOLD) % INCREMENT_THRESHOLD == 0 or up_count == UP_THRESHOLD:
                     message += f"> **上涨家数突破**: <font color=\"info\">{up_count}</font> 家！\n"
                     notification_needed = True
 
             # 下跌预警
             if down_count >= DOWN_THRESHOLD:
-                # 简化逻辑：如果下跌家数达到或超过3500，并且是3500 + N*250 的形式，就提醒
                 if (down_count - DOWN_THRESHOLD) % INCREMENT_THRESHOLD == 0 or down_count == DOWN_THRESHOLD:
                     message += f"> **下跌家数突破**: <font color=\"warning\">{down_count}</font> 家！\n"
                     notification_needed = True
