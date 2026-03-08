@@ -37,7 +37,7 @@ def fetch_market_data():
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
-    # 1. 获取涨跌家数统计 (包含涨停、跌停家数)
+    # 1. 尝试获取详细统计 (包含涨停、跌停)
     try:
         url_summary = "https://push2ex.eastmoney.com/api/qt/pts/get"
         params_summary = {
@@ -46,7 +46,7 @@ def fetch_market_data():
             "ut": "b2884a393a59ad64002292a3e90d46a5"
         }
         res = requests.get(url_summary, params=params_summary, headers=headers, timeout=10 ).json()
-        if res and "data" in res:
+        if res and res.get("data"):
             data = res["data"]
             result["up"] = data.get("f2", 0)
             result["down"] = data.get("f3", 0)
@@ -54,9 +54,28 @@ def fetch_market_data():
             result["limit_up"] = data.get("f14", 0)
             result["limit_down"] = data.get("f15", 0)
     except Exception as e:
-        print(f"获取市场概况失败: {e}")
+        print(f"获取详细统计失败: {e}")
 
-    # 2. 获取指数行情
+    # 2. 如果上方数据为0（非交易日常见情况），尝试使用备用稳定接口获取基础涨跌家数
+    if result["up"] == 0 and result["down"] == 0:
+        try:
+            url_backup = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+            params_backup = {
+                "fltt": "2",
+                "secids": "1.000001,0.399001",
+                "fields": "f104,f105,f106",
+                "ut": "b2884a393a59ad64002292a3e90d46a5"
+            }
+            res_bak = requests.get(url_backup, params=params_backup, headers=headers, timeout=10 ).json()
+            if res_bak and "data" in res_bak and "diff" in res_bak["data"]:
+                for item in res_bak["data"]["diff"]:
+                    result["up"] += item.get("f104", 0)
+                    result["down"] += item.get("f105", 0)
+                    result["flat"] += item.get("f106", 0)
+        except Exception as e:
+            print(f"获取备用数据失败: {e}")
+
+    # 3. 获取指数行情
     try:
         url_index = "https://push2.eastmoney.com/api/qt/ulist.np/get"
         params_index = {
@@ -85,16 +104,13 @@ def is_trading_time(current_date):
     return time(9, 15) <= now_time <= time(15, 0)
 
 def send_wechat_notification(content, key):
-    if not key:
-        print("未检测到 QYWECHAT_KEY")
-        return
+    if not key: return
     if "qyapi.weixin.qq.com" in key and "?key=" in key:
         key = key.split("?key=")[1]
     url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
     payload = {"msgtype": "markdown", "markdown": {"content": content}}
     try:
-        response = requests.post(url, json=payload, timeout=10 )
-        print(f"通知发送结果: {response.text}")
+        requests.post(url, json=payload, timeout=10 )
     except Exception as e:
         print(f"发送通知出错: {e}")
 
@@ -145,14 +161,16 @@ def main():
     
     elif event_name == "schedule":
         if not is_trading_time(current_date): return
-        up_count, down_count = result["up"], result["down"]
-        msg = f"### A股情绪监测 ({result['date']})\n"
-        notify = False
-        if up_count >= UP_THRESHOLD and (up_count - UP_THRESHOLD) % INCREMENT_THRESHOLD == 0:
-            msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"; notify = True
-        if down_count >= DOWN_THRESHOLD and (down_count - DOWN_THRESHOLD) % INCREMENT_THRESHOLD == 0:
-            msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"; notify = True
-        if notify: send_wechat_notification(msg, wechat_key)
+        result = fetch_market_data()
+        if result:
+            up_count, down_count = result["up"], result["down"]
+            msg = f"### A股情绪监测 ({result['date']})\n"
+            notify = False
+            if up_count >= UP_THRESHOLD and (up_count - UP_THRESHOLD) % INCREMENT_THRESHOLD == 0:
+                msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"; notify = True
+            if down_count >= DOWN_THRESHOLD and (down_count - DOWN_THRESHOLD) % INCREMENT_THRESHOLD == 0:
+                msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"; notify = True
+            if notify: send_wechat_notification(msg, wechat_key)
 
 if __name__ == "__main__":
     main()
