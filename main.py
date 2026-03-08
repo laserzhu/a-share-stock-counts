@@ -85,9 +85,9 @@ def main():
             # 按照您的要求进行单行排版和颜色设置
             # warning 为橙红色，info 为绿色/蓝色
             output = (
-                f"上涨家数: <font color=\"warning\">{result['up']}</font>   "
-                f"平盘家数: {result['flat']}   "
-                f"下跌家数: <font color=\"info\">{result['down']}</font>\n"
+                f"涨: <font color=\"warning\">{result['up']}</font>   "
+                f"平: {result['flat']}   "
+                f"跌: <font color=\"info\">{result['down']}</font>\n"
                 f"总计家数: {result['up'] + result['down'] + result['flat']}\n\n"
             )
             
