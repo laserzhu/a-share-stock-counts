@@ -12,9 +12,9 @@ try:
 except ImportError:
     print("正在安装缺失的依赖库...")
     install('requests')
-    install('chinesecalendar') # 安装名
+    install('chinesecalendar')
     import requests
-    import chinese_calendar # 导入名
+    import chinese_calendar
 
 import json
 from datetime import datetime, time, date
@@ -80,21 +80,35 @@ def main():
     current_date = date.today()
     
     if event_name in ["workflow_dispatch", "manual"]:
-        rules_text = "### 运行规则 (手动模式)\n1. 抓取 A 股当前涨跌家数。\n2. 非交易日显示上一个交易日数据。\n"
-        trading_day_info = ""
-        if not is_trading_time(current_date):
-            trading_day_info = f"提示: 今天 ({current_date.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
         result = fetch_stock_counts()
         if result:
+            # 核心统计数据置顶
             output = (
                 f"### A股涨跌家数统计\n"
-                f"> **查询时间**: {result['date']}\n"
                 f"> **上涨家数**: <font color=\"info\">{result['up']}</font>\n"
                 f"> **下跌家数**: <font color=\"warning\">{result['down']}</font>\n"
                 f"> **平盘家数**: {result['flat']}\n"
-                f"> **总计家数**: {result['up'] + result['down'] + result['flat']}\n"
+                f"> **总计家数**: {result['up'] + result['down'] + result['flat']}\n\n"
             )
-            send_wechat_notification(f"{rules_text}\n{trading_day_info}\n{output}", os.environ.get("QYWECHAT_KEY"))
+            
+            # 运行规则和提示信息置底
+            rules_text = (
+                f"**运行规则 (手动模式)**\n"
+                f"1. 抓取 A 股当前涨跌家数。\n"
+                f"2. 非交易日显示上一个交易日数据。\n"
+            )
+            
+            trading_day_info = ""
+            if not is_trading_time(current_date):
+                trading_day_info = f"提示: 今天 ({current_date.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
+            
+            footer = (
+                f"{rules_text}"
+                f"{trading_day_info}"
+                f"查询时间: {result['date']}"
+            )
+            
+            send_wechat_notification(f"{output}{footer}", os.environ.get("QYWECHAT_KEY"))
     
     elif event_name == "schedule":
         if not is_trading_time(current_date): return
