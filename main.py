@@ -25,21 +25,20 @@ DOWN_THRESHOLD = 3500
 INCREMENT_THRESHOLD = 250
 
 def fetch_market_data():
-    # 东方财富 API 接口 - 获取涨跌家数、涨跌停等
-    url_counts = "https://push2.eastmoney.com/api/qt/ulist.np/get"
-    params_counts = {
-        "fltt": "2",
-        "secids": "1.000001,0.399001",
-        "fields": "f1,f2,f3,f4,f6,f12,f13,f104,f105,f106,f109,f110", # f109: 涨停, f110: 跌停
+    # 1. 获取涨跌家数统计 (包含涨停、跌停家数)
+    url_summary = "https://push2ex.eastmoney.com/api/qt/pts/get"
+    params_summary = {
+        "fields1": "f1,f2,f3",
+        "fields2": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15",
         "ut": "b2884a393a59ad64002292a3e90d46a5"
     }
     
-    # 东方财富 API 接口 - 获取指数行情
+    # 2. 获取指数行情
     url_index = "https://push2.eastmoney.com/api/qt/ulist.np/get"
     params_index = {
         "fltt": "2",
         "secids": "1.000001,0.399001,0.399006,1.000688", # 沪指, 深指, 创指, 科创50
-        "fields": "f2,f3,f12,f14", # f2: 最新价, f3: 涨跌幅, f12: 代码, f14: 名称
+        "fields": "f2,f3,f12,f14",
         "ut": "b2884a393a59ad64002292a3e90d46a5"
     }
     
@@ -49,22 +48,21 @@ def fetch_market_data():
     }
     
     try:
-        # 获取涨跌统计
-        res_counts = requests.get(url_counts, params=params_counts, headers=headers, timeout=10).json()
+        # 获取全市场概况
+        res_summary = requests.get(url_summary, params=params_summary, headers=headers, timeout=10).json()
         # 获取指数行情
         res_index = requests.get(url_index, params=params_index, headers=headers, timeout=10).json()
         
-        if not res_counts or "data" not in res_counts or "diff" not in res_counts["data"]:
+        if not res_summary or "data" not in res_summary:
             return None
             
-        diff = res_counts["data"]["diff"]
-        total_up, total_down, total_flat, total_limit_up, total_limit_down = 0, 0, 0, 0, 0
-        for item in diff:
-            total_up += item.get("f104", 0)
-            total_down += item.get("f105", 0)
-            total_flat += item.get("f106", 0)
-            total_limit_up += item.get("f109", 0)
-            total_limit_down += item.get("f110", 0)
+        data = res_summary["data"]
+        # f2: 上涨, f3: 下跌, f4: 平盘, f14: 涨停, f15: 跌停
+        total_up = data.get("f2", 0)
+        total_down = data.get("f3", 0)
+        total_flat = data.get("f4", 0)
+        total_limit_up = data.get("f14", 0)
+        total_limit_down = data.get("f15", 0)
             
         indices = []
         if res_index and "data" in res_index and "diff" in res_index["data"]:
