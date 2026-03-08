@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+from datetime import datetime, time, date, timedelta, timezone
 
 # 自动安装缺失的库
 def install(package):
@@ -16,8 +17,11 @@ except ImportError:
     import requests
     import chinese_calendar
 
-import json
-from datetime import datetime, time, date
+# 获取北京时间
+def get_beijing_time():
+    # 创建 UTC+8 时区
+    tz_beijing = timezone(timedelta(hours=8))
+    return datetime.now(tz_beijing)
 
 # 预警阈值
 UP_THRESHOLD = 3500
@@ -30,11 +34,12 @@ def fetch_market_data():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64 ) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
+    now_bj = get_beijing_time()
     result = {
         "up": 0, "down": 0, "flat": 0,
         "limit_up": 0, "limit_down": 0,
         "indices": [],
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": now_bj.strftime("%Y-%m-%d %H:%M:%S")
     }
 
     # 1. 尝试获取详细统计 (包含涨停、跌停)
@@ -97,10 +102,13 @@ def fetch_market_data():
                 
     return result
 
-def is_trading_time(current_date):
-    if current_date.weekday() >= 5: return False
-    if chinese_calendar.is_holiday(current_date): return False
-    now_time = datetime.now().time()
+def is_trading_time(current_bj_time):
+    # 检查是否为周末
+    if current_bj_time.weekday() >= 5: return False
+    # 检查是否为法定节假日
+    if chinese_calendar.is_holiday(current_bj_time.date()): return False
+    # 检查交易时间 (9:15 - 15:00)
+    now_time = current_bj_time.time()
     return time(9, 15) <= now_time <= time(15, 0)
 
 def send_wechat_notification(content, key):
@@ -116,7 +124,7 @@ def send_wechat_notification(content, key):
 
 def main():
     event_name = os.environ.get("GITHUB_EVENT_NAME", "manual")
-    current_date = date.today()
+    now_bj = get_beijing_time()
     wechat_key = os.environ.get("QYWECHAT_KEY")
     
     result = fetch_market_data()
@@ -142,8 +150,8 @@ def main():
         
         # 3. 提示信息和查询时间
         trading_day_info = ""
-        if not is_trading_time(current_date):
-            trading_day_info = f"提示: 今天 ({current_date.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
+        if not is_trading_time(now_bj):
+            trading_day_info = f"提示: 今天 ({now_bj.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
         
         footer = (
             f"{trading_day_info}"
@@ -153,7 +161,7 @@ def main():
         send_wechat_notification(f"{output}{index_text}{footer}", wechat_key)
     
     elif event_name == "schedule":
-        if not is_trading_time(current_date): return
+        if not is_trading_time(now_bj): return
         result = fetch_market_data()
         if result:
             up_count, down_count = result["up"], result["down"]
