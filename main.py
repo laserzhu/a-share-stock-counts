@@ -82,16 +82,15 @@ def main():
     if event_name in ["workflow_dispatch", "manual"]:
         result = fetch_stock_counts()
         if result:
-            # 核心统计数据置顶
+            # 按照您的要求进行单行排版和颜色设置
+            # warning 为橙红色，info 为绿色/蓝色
             output = (
-                f"### A股涨跌家数统计\n"
-                f"> **上涨家数**: <font color=\"info\">{result['up']}</font>\n"
-                f"> **下跌家数**: <font color=\"warning\">{result['down']}</font>\n"
-                f"> **平盘家数**: {result['flat']}\n"
-                f"> **总计家数**: {result['up'] + result['down'] + result['flat']}\n\n"
+                f"上涨家数: <font color=\"warning\">{result['up']}</font>   "
+                f"平盘家数: {result['flat']}   "
+                f"下跌家数: <font color=\"info\">{result['down']}</font>\n"
+                f"总计家数: {result['up'] + result['down'] + result['flat']}\n\n"
             )
             
-            # 运行规则和提示信息置底
             rules_text = (
                 f"**运行规则 (手动模式)**\n"
                 f"1. 抓取 A 股当前涨跌家数。\n"
@@ -117,10 +116,11 @@ def main():
             up_count, down_count = result["up"], result["down"]
             msg = f"### A股情绪监测 ({result['date']})\n"
             notify = False
+            # 自动监测模式下的预警通知
             if up_count >= UP_THRESHOLD and (up_count - UP_THRESHOLD) % INCREMENT_THRESHOLD == 0:
-                msg += f"> **上涨突破**: <font color=\"info\">{up_count}</font> 家！\n"; notify = True
+                msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"; notify = True
             if down_count >= DOWN_THRESHOLD and (down_count - DOWN_THRESHOLD) % INCREMENT_THRESHOLD == 0:
-                msg += f"> **下跌突破**: <font color=\"warning\">{down_count}</font> 家！\n"; notify = True
+                msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"; notify = True
             if notify: send_wechat_notification(msg, os.environ.get("QYWECHAT_KEY"))
 
 if __name__ == "__main__":
