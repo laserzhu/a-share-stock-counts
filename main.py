@@ -88,7 +88,7 @@ def main():
                 f"跌: <font color=\"info\">{result['down']}</font>  |  "
                 f"平: {result['flat']}\n"
                 f"总计家数: {result['up'] + result['down'] + result['flat']}\n"
-                f"-----------------------\n"
+                f"------------------------------\n"
             )
             
             rules_text = (
