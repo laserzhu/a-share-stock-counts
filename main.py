@@ -138,7 +138,7 @@ def main():
             f"总计家数: {result['up'] + result['down'] + result['flat']}\n"
             f"涨停: <font color=\"warning\">{result['limit_up']}</font>  |  "
             f"跌停: <font color=\"info\">{result['limit_down']}</font>\n"
-            f"-----------------------\n"
+            f"-----------------------------\n"
         )
         
         # 2. 指数行情
@@ -146,7 +146,7 @@ def main():
         for idx in result['indices']:
             color = "warning" if (idx['pct'] or 0) > 0 else "info" if (idx['pct'] or 0) < 0 else "comment"
             index_text += f"{idx['name']}: {idx['price']} (<font color=\"{color}\">{idx['pct']}%</font>)\n"
-        index_text += f"-----------------------\n"
+        index_text += f"-----------------------------\n"
         
         # 3. 提示信息和查询时间
         trading_day_info = ""
