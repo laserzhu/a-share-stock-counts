@@ -82,13 +82,13 @@ def main():
     if event_name in ["workflow_dispatch", "manual"]:
         result = fetch_stock_counts()
         if result:
-            # 按照您的要求进行单行排版和颜色设置
-            # warning 为橙红色，info 为绿色/蓝色
+            # 按照您的要求进行排版：涨 | 跌 | 平
             output = (
-                f"涨: <font color=\"warning\">{result['up']}</font>   "
-                f"平: {result['flat']}   "
-                f"跌: <font color=\"info\">{result['down']}</font>\n"
-                f"总计家数: {result['up'] + result['down'] + result['flat']}\n\n"
+                f"涨: <font color=\"warning\">{result['up']}</font>  |  "
+                f"跌: <font color=\"info\">{result['down']}</font>  |  "
+                f"平: {result['flat']}\n"
+                f"总计家数: {result['up'] + result['down'] + result['flat']}\n"
+                f"-----------------------\n"
             )
             
             rules_text = (
@@ -116,7 +116,6 @@ def main():
             up_count, down_count = result["up"], result["down"]
             msg = f"### A股情绪监测 ({result['date']})\n"
             notify = False
-            # 自动监测模式下的预警通知
             if up_count >= UP_THRESHOLD and (up_count - UP_THRESHOLD) % INCREMENT_THRESHOLD == 0:
                 msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"; notify = True
             if down_count >= DOWN_THRESHOLD and (down_count - DOWN_THRESHOLD) % INCREMENT_THRESHOLD == 0:
