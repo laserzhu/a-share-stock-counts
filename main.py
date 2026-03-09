@@ -24,9 +24,9 @@ def get_beijing_time():
     return datetime.now(tz)
 
 # 预警参数
-UP_THRESHOLD = 1000
-DOWN_THRESHOLD = 1000
-INCREMENT_THRESHOLD = 1
+UP_THRESHOLD = 3500
+DOWN_THRESHOLD = 3500
+INCREMENT_THRESHOLD = 250
 
 STATUS_FILE = "status.json"
 
@@ -63,45 +63,39 @@ def fetch_market_data():
         "date": now.strftime("%Y-%m-%d %H:%M")
     }
 
-    # 主接口
+    # 1. 获取涨跌分布数据 (上涨/下跌/平盘)
     try:
-        url = "https://push2ex.eastmoney.com/api/qt/pts/get"
+        url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
         params = {
-            "fields1": "f1,f2,f3",
-            "fields2": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15",
+            "fltt": "2",
+            "secids": "1.000001,0.399001",
+            "fields": "f104,f105,f106",
             "ut": "b2884a393a59ad64002292a3e90d46a5"
         }
-        res = requests.get(url, params=params, headers=headers, timeout=10).json()
+        res = requests.get(url, params=params, headers=headers, timeout=5).json()
+        if res and "data" in res and "diff" in res["data"]:
+            for i in res["data"]["diff"]:
+                result["up"] += i.get("f104", 0)
+                result["down"] += i.get("f105", 0)
+                result["flat"] += i.get("f106", 0)
+    except Exception as e:
+        print("涨跌分布接口失败:", e)
+
+    # 2. 获取涨跌停数据
+    try:
+        url = "https://push2.eastmoney.com/api/qt/ztb/get"
+        params = {
+            "ut": "b2884a393a59ad64002292a3e90d46a5"
+        }
+        res = requests.get(url, params=params, headers=headers, timeout=5).json()
         if res and res.get("data"):
             data = res["data"]
-            result["up"] = data.get("f2", 0)
-            result["down"] = data.get("f3", 0)
-            result["flat"] = data.get("f4", 0)
-            result["limit_up"] = data.get("f14", 0)
-            result["limit_down"] = data.get("f15", 0)
+            result["limit_up"] = data.get("znum", 0)
+            result["limit_down"] = data.get("dnum", 0)
     except Exception as e:
-        print("主接口失败:", e)
+        print("涨跌停接口失败:", e)
 
-    # 备用接口
-    if result["up"] == 0 and result["down"] == 0:
-        try:
-            url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
-            params = {
-                "fltt": "2",
-                "secids": "1.000001,0.399001",
-                "fields": "f104,f105,f106",
-                "ut": "b2884a393a59ad64002292a3e90d46a5"
-            }
-            res = requests.get(url, params=params, headers=headers, timeout=10).json()
-            if res and "data" in res and "diff" in res["data"]:
-                for i in res["data"]["diff"]:
-                    result["up"] += i.get("f104", 0)
-                    result["down"] += i.get("f105", 0)
-                    result["flat"] += i.get("f106", 0)
-        except Exception as e:
-            print("备用接口失败:", e)
-
-    # 指数
+    # 3. 获取指数数据
     try:
         url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
         params = {
@@ -110,7 +104,7 @@ def fetch_market_data():
             "fields": "f2,f3,f12,f14",
             "ut": "b2884a393a59ad64002292a3e90d46a5"
         }
-        res = requests.get(url, params=params, headers=headers, timeout=10).json()
+        res = requests.get(url, params=params, headers=headers, timeout=5).json()
         if res and "data" in res and "diff" in res["data"]:
             for idx in res["data"]["diff"]:
                 result["indices"].append({
@@ -125,12 +119,15 @@ def fetch_market_data():
 
 # 判断交易时间
 def is_trading_time(now):
+    # 周一到周五
     if now.weekday() >= 5:
         return False
+    # 法定节假日
     if chinese_calendar.is_holiday(now.date()):
         return False
+    # 交易时间段
     t = now.time()
-    return time(9, 0) <= t <= time(15, 0)
+    return time(9, 30) <= t <= time(15, 0)
 
 # 统一消息格式
 def format_market_message(result):
@@ -139,17 +136,19 @@ def format_market_message(result):
     flat = result["flat"]
     limit_up = result["limit_up"]
     limit_down = result["limit_down"]
-    msg = ""
-    msg += f"涨: <font color=\"warning\">{up}</font>  |  跌: <font color=\"info\">{down}</font>  |  平: {flat}\n"
-    msg += f"总计家数: {up + down + flat}\n"
-    msg += f"涨停: <font color=\"warning\">{limit_up}</font> |  跌停: <font color=\"info\">{limit_down}</font>\n"
-    msg += "--------------------------------\n"
+    total = up + down + flat
+
+    msg = f"**A股市场全景**\n"
+    msg += f"> 涨: <font color=\"warning\">{up}</font> | 跌: <font color=\"info\">{down}</font> | 平: {flat}\n"
+    msg += f"> 总计: {total}\n"
+    msg += f"> 涨停: <font color=\"warning\">{limit_up}</font> | 跌停: <font color=\"info\">{limit_down}</font>\n"
+    msg += "**主要指数**\n"
     for idx in result["indices"]:
         pct = idx["pct"] or 0
         color = "warning" if pct > 0 else "info" if pct < 0 else "comment"
-        msg += f"{idx['name']}: {idx['price']} (<font color=\"{color}\">{pct}%</font>)\n"
-    msg += "--------------------------------\n"
-    msg += f"查询时间: {result['date']}"
+        price = "{:.2f}".format(idx["price"] / 100) if idx["price"] else "-"
+        msg += f"> {idx['name']}: {price} (<font color=\"{color}\">{pct}%</font>)\n"
+    msg += f"<font color=\"comment\">{result['date']}</font>"
     return msg
 
 # 企业微信发送
@@ -173,8 +172,8 @@ def main():
     key = os.environ.get("QYWECHAT_KEY")
     result = fetch_market_data()
 
-    # 手动触发
-    if event in ["workflow_dispatch", "manual"]:
+    # 手动触发，或数据异常时，直接发送完整盘面
+    if event in ["workflow_dispatch", "manual"] or (result['up'] == 0 and result['down'] == 0):
         msg = format_market_message(result)
         send_wechat(msg, key)
         return
@@ -190,26 +189,26 @@ def main():
         alert = ""
         notify = False
 
-        # 上涨
-        if up >= UP_THRESHOLD:
-            if status["last_alert_up_level"] == 0 or abs(up - status["last_alert_up_level"]) >= INCREMENT_THRESHOLD:
-                alert += f"### 上涨预警\n> 上涨家数: <font color=\"warning\">{up}</font>\n\n"
-                status["last_alert_up_level"] = up
-                notify = True
-        else:
+        # 上涨预警
+        up_level = up // INCREMENT_THRESHOLD
+        if up >= UP_THRESHOLD and up_level > status["last_alert_up_level"]:
+            alert += f"### **<font color=\"warning\">📈 上涨家数突破 {up_level * INCREMENT_THRESHOLD}</font>**\n"
+            status["last_alert_up_level"] = up_level
+            notify = True
+        elif up < UP_THRESHOLD:
             status["last_alert_up_level"] = 0
 
-        # 下跌
-        if down >= DOWN_THRESHOLD:
-            if status["last_alert_down_level"] == 0 or abs(down - status["last_alert_down_level"]) >= INCREMENT_THRESHOLD:
-                alert += f"### 下跌预警\n> 下跌家数: <font color=\"info\">{down}</font>\n\n"
-                status["last_alert_down_level"] = down
-                notify = True
-        else:
+        # 下跌预警
+        down_level = down // INCREMENT_THRESHOLD
+        if down >= DOWN_THRESHOLD and down_level > status["last_alert_down_level"]:
+            alert += f"### **<font color=\"info\">📉 下跌家数突破 {down_level * INCREMENT_THRESHOLD}</font>**\n"
+            status["last_alert_down_level"] = down_level
+            notify = True
+        elif down < DOWN_THRESHOLD:
             status["last_alert_down_level"] = 0
 
         if notify:
-            msg = alert + format_market_message(result)
+            msg = alert + "\n" + format_market_message(result)
             send_wechat(msg, key)
             save_status(status)
 
