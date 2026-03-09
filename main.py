@@ -28,7 +28,7 @@ def get_beijing_time():
 # 预警参数
 UP_THRESHOLD = 3500
 DOWN_THRESHOLD = 3500
-INCREMENT_THRESHOLD = 50
+INCREMENT_THRESHOLD = 10
 
 STATUS_FILE = "status.json"
 
