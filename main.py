@@ -3,11 +3,9 @@ import sys
 import subprocess
 from datetime import datetime, time, timedelta, timezone
 import json
-
 # 自动安装依赖
 def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
 try:
     import requests
     import chinese_calendar
@@ -17,19 +15,15 @@ except ImportError:
     install("chinesecalendar")
     import requests
     import chinese_calendar
-
 # 北京时间
 def get_beijing_time():
     tz = timezone(timedelta(hours=8))
     return datetime.now(tz)
-
 # 预警参数
 UP_THRESHOLD = 3500
 DOWN_THRESHOLD = 3500
 INCREMENT_THRESHOLD = 250
-
 STATUS_FILE = "status.json"
-
 # 状态读取
 def load_status():
     if os.path.exists(STATUS_FILE):
@@ -39,19 +33,16 @@ def load_status():
         except:
             pass
     return {"last_alert_up_level": 0, "last_alert_down_level": 0}
-
 # 保存状态
 def save_status(status):
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, ensure_ascii=False, indent=2)
-
 # 获取市场数据
 def fetch_market_data():
     headers = {
         "Referer": "https://data.eastmoney.com/",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
-
     now = get_beijing_time()
     result = {
         "up": 0,
@@ -62,7 +53,6 @@ def fetch_market_data():
         "indices": [],
         "date": now.strftime("%Y-%m-%d %H:%M")
     }
-
     # 1. 获取涨跌分布数据 (上涨/下跌/平盘)
     try:
         url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
@@ -80,21 +70,23 @@ def fetch_market_data():
                 result["flat"] += i.get("f106", 0)
     except Exception as e:
         print("涨跌分布接口失败:", e)
-
     # 2. 获取涨跌停数据
     try:
-        url = "https://push2.eastmoney.com/api/qt/ztb/get"
+        url = "https://data.10jqka.com.cn/dataapi/limit_up/limit_up_pool"
         params = {
-            "ut": "b2884a393a59ad64002292a3e90d46a5"
+            "page": "1",
+            "limit": "1",
+            "field": "199112,10,9001,330329,330325",
+            "filter": "HS,GEM2STAR",
+            "order_field": "330329",
+            "order_type": "0"
         }
         res = requests.get(url, params=params, headers=headers, timeout=5).json()
-        if res and res.get("data"):
-            data = res["data"]
-            result["limit_up"] = data.get("znum", 0)
-            result["limit_down"] = data.get("dnum", 0)
+        if res:
+            result["limit_up"] = res.get("limit_up_num", 0)
+            result["limit_down"] = res.get("limit_down_num", 0)
     except Exception as e:
         print("涨跌停接口失败:", e)
-
     # 3. 获取指数数据
     try:
         url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
@@ -114,9 +106,7 @@ def fetch_market_data():
                 })
     except Exception as e:
         print("指数接口失败:", e)
-
     return result
-
 # 判断交易时间
 def is_trading_time(now):
     # 周一到周五
@@ -128,7 +118,6 @@ def is_trading_time(now):
     # 交易时间段
     t = now.time()
     return time(9, 30) <= t <= time(15, 0)
-
 # 统一消息格式
 def format_market_message(result):
     up = result["up"]
@@ -137,7 +126,6 @@ def format_market_message(result):
     limit_up = result["limit_up"]
     limit_down = result["limit_down"]
     total = up + down + flat
-
     msg = f"**A股市场全景**\n"
     msg += f"> 涨: <font color=\"warning\">{up}</font> | 跌: <font color=\"info\">{down}</font> | 平: {flat}\n"
     msg += f"> 总计: {total}\n"
@@ -150,7 +138,6 @@ def format_market_message(result):
         msg += f"> {idx['name']}: {price} (<font color=\"{color}\">{pct}%</font>)\n"
     msg += f"<font color=\"comment\">{result['date']}</font>"
     return msg
-
 # 企业微信发送
 def send_wechat(msg, key):
     if not key:
@@ -164,31 +151,26 @@ def send_wechat(msg, key):
         print("微信返回:", res.status_code, res.text)
     except Exception as e:
         print("发送失败:", e)
-
 # 主程序
 def main():
     event = os.environ.get("GITHUB_EVENT_NAME", "manual")
     now = get_beijing_time()
     key = os.environ.get("QYWECHAT_KEY")
     result = fetch_market_data()
-
     # 手动触发，或数据异常时，直接发送完整盘面
     if event in ["workflow_dispatch", "manual"] or (result['up'] == 0 and result['down'] == 0):
         msg = format_market_message(result)
         send_wechat(msg, key)
         return
-
     # 自动监控
     if event == "schedule":
         if not is_trading_time(now):
             return
-
         status = load_status()
         up = result["up"]
         down = result["down"]
         alert = ""
         notify = False
-
         # 上涨预警
         up_level = up // INCREMENT_THRESHOLD
         if up >= UP_THRESHOLD and up_level > status["last_alert_up_level"]:
@@ -197,7 +179,6 @@ def main():
             notify = True
         elif up < UP_THRESHOLD:
             status["last_alert_up_level"] = 0
-
         # 下跌预警
         down_level = down // INCREMENT_THRESHOLD
         if down >= DOWN_THRESHOLD and down_level > status["last_alert_down_level"]:
@@ -206,11 +187,9 @@ def main():
             notify = True
         elif down < DOWN_THRESHOLD:
             status["last_alert_down_level"] = 0
-
         if notify:
             msg = alert + "\n" + format_market_message(result)
             send_wechat(msg, key)
             save_status(status)
-
 if __name__ == "__main__":
     main()
