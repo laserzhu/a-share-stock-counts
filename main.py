@@ -37,7 +37,8 @@ def load_status():
                 return json.load(f)
         except json.JSONDecodeError:
             print(f"警告: {STATUS_FILE} 文件内容损坏，将重置状态。")
-    return {"last_notified_up": 0, "last_notified_down": 0}
+    # 初始状态或重置状态
+    return {"last_alert_up_level": 0, "last_alert_down_level": 0}
 
 def save_status(status):
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
@@ -196,22 +197,46 @@ def main():
             notify = False
             
             # 上涨预警逻辑
-            if up_count >= UP_THRESHOLD:
-                # 首次达到阈值或每增加 INCREMENT_THRESHOLD
-                if (up_count >= current_status["last_notified_up"] + INCREMENT_THRESHOLD) or \
-                   (current_status["last_notified_up"] < UP_THRESHOLD and up_count >= UP_THRESHOLD):
-                    msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"
-                    current_status["last_notified_up"] = up_count
-                    notify = True
-            
-            # 下跌预警逻辑
-            if down_count >= DOWN_THRESHOLD:
-                # 首次达到阈值或每增加 INCREMENT_THRESHOLD
-                if (down_count >= current_status["last_notified_down"] + INCREMENT_THRESHOLD) or \
-                   (current_status["last_notified_down"] < DOWN_THRESHOLD and down_count >= DOWN_THRESHOLD):
-                    msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"
-                    current_status["last_notified_down"] = down_count
-                    notify = True
+            # 1. 首次突破阈值 (从0到 >= UP_THRESHOLD)
+            if up_count >= UP_THRESHOLD and current_status["last_alert_up_level"] == 0:
+                msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"
+                current_status["last_alert_up_level"] = up_count
+                notify = True
+            # 2. 在阈值之上，上涨超过上次提醒值 INCREMENT_THRESHOLD
+            elif up_count >= UP_THRESHOLD and up_count >= current_status["last_alert_up_level"] + INCREMENT_THRESHOLD:
+                msg += f"> **上涨持续**: <font color=\"warning\">{up_count}</font> 家！\n"
+                current_status["last_alert_up_level"] = up_count
+                notify = True
+            # 3. 在阈值之上，下跌超过上次提醒值 INCREMENT_THRESHOLD
+            elif up_count >= UP_THRESHOLD and up_count <= current_status["last_alert_up_level"] - INCREMENT_THRESHOLD:
+                msg += f"> **上涨回落**: <font color=\"warning\">{up_count}</font> 家！\n"
+                current_status["last_alert_up_level"] = up_count
+                notify = True
+            # 4. 回落到阈值以下，重置状态
+            elif up_count < UP_THRESHOLD and current_status["last_alert_up_level"] != 0:
+                current_status["last_alert_up_level"] = 0
+                # 不发送通知，只是重置状态
+
+            # 下跌预警逻辑 (与上涨逻辑对称)
+            # 1. 首次突破阈值 (从0到 >= DOWN_THRESHOLD)
+            if down_count >= DOWN_THRESHOLD and current_status["last_alert_down_level"] == 0:
+                msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"
+                current_status["last_alert_down_level"] = down_count
+                notify = True
+            # 2. 在阈值之上，下跌超过上次提醒值 INCREMENT_THRESHOLD
+            elif down_count >= DOWN_THRESHOLD and down_count >= current_status["last_alert_down_level"] + INCREMENT_THRESHOLD:
+                msg += f"> **下跌持续**: <font color=\"info\">{down_count}</font> 家！\n"
+                current_status["last_alert_down_level"] = down_count
+                notify = True
+            # 3. 在阈值之上，上涨超过上次提醒值 INCREMENT_THRESHOLD
+            elif down_count >= DOWN_THRESHOLD and down_count <= current_status["last_alert_down_level"] - INCREMENT_THRESHOLD:
+                msg += f"> **下跌回升**: <font color=\"info\">{down_count}</font> 家！\n"
+                current_status["last_alert_down_level"] = down_count
+                notify = True
+            # 4. 回落到阈值以下，重置状态
+            elif down_count < DOWN_THRESHOLD and current_status["last_alert_down_level"] != 0:
+                current_status["last_alert_down_level"] = 0
+                # 不发送通知，只是重置状态
             
             if notify:
                 print("触发预警通知：")
