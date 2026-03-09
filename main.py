@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 from datetime import datetime, time, date, timedelta, timezone
+import json
 
 # 自动安装缺失的库
 def install(package):
@@ -12,14 +13,13 @@ try:
     import chinese_calendar
 except ImportError:
     print("正在安装缺失的依赖库...")
-    install('requests')
-    install('chinesecalendar')
+    install("requests")
+    install("chinesecalendar")
     import requests
     import chinese_calendar
 
 # 获取北京时间
 def get_beijing_time():
-    # 创建 UTC+8 时区
     tz_beijing = timezone(timedelta(hours=8))
     return datetime.now(tz_beijing)
 
@@ -27,6 +27,21 @@ def get_beijing_time():
 UP_THRESHOLD = 3500
 DOWN_THRESHOLD = 3500
 INCREMENT_THRESHOLD = 250
+
+STATUS_FILE = "status.json"
+
+def load_status():
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            print(f"警告: {STATUS_FILE} 文件内容损坏，将重置状态。")
+    return {"last_notified_up": 0, "last_notified_down": 0}
+
+def save_status(status):
+    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(status, f, ensure_ascii=False, indent=4)
 
 def fetch_market_data():
     headers = {
@@ -39,7 +54,7 @@ def fetch_market_data():
         "up": 0, "down": 0, "flat": 0,
         "limit_up": 0, "limit_down": 0,
         "indices": [],
-        "date": now_bj.strftime("%Y-%m-%d %H:%M") # 去掉秒数
+        "date": now_bj.strftime("%Y-%m-%d %H:%M")
     }
 
     # 1. 尝试获取详细统计 (包含涨停、跌停)
@@ -103,11 +118,8 @@ def fetch_market_data():
     return result
 
 def is_trading_time(current_bj_time):
-    # 检查是否为周末
     if current_bj_time.weekday() >= 5: return False
-    # 检查是否为法定节假日
     if chinese_calendar.is_holiday(current_bj_time.date()): return False
-    # 检查交易时间 (9:15 - 15:00)
     now_time = current_bj_time.time()
     return time(9, 15) <= now_time <= time(15, 0)
 
@@ -130,48 +142,86 @@ def main():
     result = fetch_market_data()
     
     if event_name in ["workflow_dispatch", "manual"]:
-        # 1. 涨跌统计
+        up_val = str(result["up"])
+        down_val = str(result["down"])
+        flat_val = str(result["flat"])
+        limit_up_val = str(result["limit_up"])
+        limit_down_val = str(result["limit_down"])
+        
+        # 涨跌平排版
+        line1 = (
+            f"涨: <font color=\"warning\">{up_val}</font>  |  "
+            f"跌: <font color=\"info\">{down_val}</font>  |  "
+            f"平: {flat_val}"
+        )
+        # 涨停跌停排版
+        line2 = (
+            f"涨停: <font color=\"warning\">{limit_up_val}</font> |  "
+            f"跌停: <font color=\"info\">{limit_down_val}</font> |"
+        )
+
         output = (
-            f"涨: <font color=\"warning\">{result['up']}</font>  |  "
-            f"跌: <font color=\"info\">{result['down']}</font>  |  "
-            f"平: {result['flat']}\n"
-            f"总计家数: {result['up'] + result['down'] + result['flat']}\n"
-            f"涨停: <font color=\"warning\">{result['limit_up']}</font>  |  "
-            f"跌停: <font color=\"info\">{result['limit_down']}</font>\n"
+            f"{line1}\n"
+            f"总计家数: {result["up"] + result["down"] + result["flat"]}\n"
+            f"{line2}\n"
             f"--------------------------------\n"
         )
         
-        # 2. 指数行情
         index_text = ""
-        for idx in result['indices']:
-            color = "warning" if (idx['pct'] or 0) > 0 else "info" if (idx['pct'] or 0) < 0 else "comment"
-            index_text += f"{idx['name']}: {idx['price']} (<font color=\"{color}\">{idx['pct']}%</font>)\n"
+        for idx in result["indices"]:
+            color = "warning" if (idx["pct"] or 0) > 0 else "info" if (idx["pct"] or 0) < 0 else "comment"
+            index_text += f"{idx["name"]}: {idx["price"]} (<font color=\"{color}\">{idx["pct"]}%</font>)\n"
         index_text += f"--------------------------------\n"
         
-        # 3. 提示信息和查询时间
         trading_day_info = ""
         if not is_trading_time(now_bj):
-            trading_day_info = f"提示: 今天 ({now_bj.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
+            trading_day_info = f"提示: 今天 ({now_bj.strftime("%Y-%m-%d")}) 是非交易日，显示上一个交易日数据。\n"
         
         footer = (
             f"{trading_day_info}"
-            f"查询时间: {result['date']}"
+            f"查询时间: {result["date"]}"
         )
         
         send_wechat_notification(f"{output}{index_text}{footer}", wechat_key)
     
     elif event_name == "schedule":
         if not is_trading_time(now_bj): return
+        
+        current_status = load_status()
         result = fetch_market_data()
+        
         if result:
             up_count, down_count = result["up"], result["down"]
-            msg = f"### A股情绪监测 ({result['date']})\n"
+            msg = f"### A股情绪监测 ({result["date"]})\n"
             notify = False
-            if up_count >= UP_THRESHOLD and (up_count - UP_THRESHOLD) % INCREMENT_THRESHOLD == 0:
-                msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"; notify = True
-            if down_count >= DOWN_THRESHOLD and (down_count - DOWN_THRESHOLD) % INCREMENT_THRESHOLD == 0:
-                msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"; notify = True
-            if notify: send_wechat_notification(msg, wechat_key)
+            
+            # 上涨预警逻辑
+            if up_count >= UP_THRESHOLD:
+                # 首次达到阈值或每增加 INCREMENT_THRESHOLD
+                if (up_count >= current_status["last_notified_up"] + INCREMENT_THRESHOLD) or \
+                   (current_status["last_notified_up"] < UP_THRESHOLD and up_count >= UP_THRESHOLD):
+                    msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"
+                    current_status["last_notified_up"] = up_count
+                    notify = True
+            
+            # 下跌预警逻辑
+            if down_count >= DOWN_THRESHOLD:
+                # 首次达到阈值或每增加 INCREMENT_THRESHOLD
+                if (down_count >= current_status["last_notified_down"] + INCREMENT_THRESHOLD) or \
+                   (current_status["last_notified_down"] < DOWN_THRESHOLD and down_count >= DOWN_THRESHOLD):
+                    msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"
+                    current_status["last_notified_down"] = down_count
+                    notify = True
+            
+            if notify:
+                print("触发预警通知：")
+                print(msg)
+                send_wechat_notification(msg, wechat_key)
+                save_status(current_status) # 保存更新后的状态
+            else:
+                print("未达到预警条件，不发送通知。")
+        else:
+            print("未能获取到数据，请检查网络或接口。")
 
 if __name__ == "__main__":
     main()
