@@ -3,7 +3,7 @@ name: 监测A股大盘行情
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 1-7 * * 1-5'
+    - cron: '*/5 1-8 * * 1-5'
 
 jobs:
   fetch:
