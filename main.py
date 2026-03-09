@@ -26,7 +26,7 @@ def get_beijing_time():
 # 预警阈值
 UP_THRESHOLD = 3500
 DOWN_THRESHOLD = 3500
-INCREMENT_THRESHOLD = 250
+INCREMENT_THRESHOLD = 50 # 修改为 50
 
 STATUS_FILE = "status.json"
 
@@ -37,7 +37,6 @@ def load_status():
                 return json.load(f)
         except json.JSONDecodeError:
             print(f"警告: {STATUS_FILE} 文件内容损坏，将重置状态。")
-    # 初始状态或重置状态
     return {"last_alert_up_level": 0, "last_alert_down_level": 0}
 
 def save_status(status):
@@ -58,7 +57,6 @@ def fetch_market_data():
         "date": now_bj.strftime("%Y-%m-%d %H:%M")
     }
 
-    # 1. 尝试获取详细统计 (包含涨停、跌停)
     try:
         url_summary = "https://push2ex.eastmoney.com/api/qt/pts/get"
         params_summary = {
@@ -77,7 +75,6 @@ def fetch_market_data():
     except Exception as e:
         print(f"获取详细统计失败: {e}")
 
-    # 2. 如果上方数据为0（非交易日常见情况），尝试使用备用稳定接口获取基础涨跌家数
     if result["up"] == 0 and result["down"] == 0:
         try:
             url_backup = "https://push2.eastmoney.com/api/qt/ulist.np/get"
@@ -96,7 +93,6 @@ def fetch_market_data():
         except Exception as e:
             print(f"获取备用数据失败: {e}")
 
-    # 3. 获取指数行情
     try:
         url_index = "https://push2.eastmoney.com/api/qt/ulist.np/get"
         params_index = {
@@ -122,7 +118,8 @@ def is_trading_time(current_bj_time):
     if current_bj_time.weekday() >= 5: return False
     if chinese_calendar.is_holiday(current_bj_time.date()): return False
     now_time = current_bj_time.time()
-    return time(9, 15) <= now_time <= time(15, 0)
+    # 修改监测时间为 9:00 到 15:00
+    return time(9, 0) <= now_time <= time(15, 0)
 
 def send_wechat_notification(content, key):
     if not key: return
@@ -149,22 +146,11 @@ def main():
         limit_up_val = str(result["limit_up"])
         limit_down_val = str(result["limit_down"])
         
-        # 涨跌平排版
-        line1 = (
-            f"涨: <font color=\"warning\">{up_val}</font>  |  "
-            f"跌: <font color=\"info\">{down_val}</font>  |  "
-            f"平: {flat_val}"
-        )
-        # 涨停跌停排版
-        line2 = (
-            f"涨停: <font color=\"warning\">{limit_up_val}</font> |  "
-            f"跌停: <font color=\"info\">{limit_down_val}</font> |"
-        )
-
+        # 调整排版以实现对齐
         output = (
-            f"{line1}\n"
+            f"涨: <font color=\"warning\">{up_val}</font>  |  跌: <font color=\"info\">{down_val}</font>  |  平: {flat_val}\n"
             f"总计家数: {result["up"] + result["down"] + result["flat"]}\n"
-            f"{line2}\n"
+            f"涨停: <font color=\"warning\">{limit_up_val}</font> |  跌停: <font color=\"info\">{limit_down_val}</font> |\n"
             f"--------------------------------\n"
         )
         
@@ -187,66 +173,42 @@ def main():
     
     elif event_name == "schedule":
         if not is_trading_time(now_bj): return
-        
         current_status = load_status()
         result = fetch_market_data()
-        
         if result:
             up_count, down_count = result["up"], result["down"]
             msg = f"### A股情绪监测 ({result["date"]})\n"
             notify = False
-            
-            # 上涨预警逻辑
-            # 1. 首次突破阈值 (从0到 >= UP_THRESHOLD)
-            if up_count >= UP_THRESHOLD and current_status["last_alert_up_level"] == 0:
-                msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"
-                current_status["last_alert_up_level"] = up_count
-                notify = True
-            # 2. 在阈值之上，上涨超过上次提醒值 INCREMENT_THRESHOLD
-            elif up_count >= UP_THRESHOLD and up_count >= current_status["last_alert_up_level"] + INCREMENT_THRESHOLD:
-                msg += f"> **上涨持续**: <font color=\"warning\">{up_count}</font> 家！\n"
-                current_status["last_alert_up_level"] = up_count
-                notify = True
-            # 3. 在阈值之上，下跌超过上次提醒值 INCREMENT_THRESHOLD
-            elif up_count >= UP_THRESHOLD and up_count <= current_status["last_alert_up_level"] - INCREMENT_THRESHOLD:
-                msg += f"> **上涨回落**: <font color=\"warning\">{up_count}</font> 家！\n"
-                current_status["last_alert_up_level"] = up_count
-                notify = True
-            # 4. 回落到阈值以下，重置状态
-            elif up_count < UP_THRESHOLD and current_status["last_alert_up_level"] != 0:
-                current_status["last_alert_up_level"] = 0
-                # 不发送通知，只是重置状态
 
-            # 下跌预警逻辑 (与上涨逻辑对称)
-            # 1. 首次突破阈值 (从0到 >= DOWN_THRESHOLD)
-            if down_count >= DOWN_THRESHOLD and current_status["last_alert_down_level"] == 0:
-                msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"
-                current_status["last_alert_down_level"] = down_count
-                notify = True
-            # 2. 在阈值之上，下跌超过上次提醒值 INCREMENT_THRESHOLD
-            elif down_count >= DOWN_THRESHOLD and down_count >= current_status["last_alert_down_level"] + INCREMENT_THRESHOLD:
-                msg += f"> **下跌持续**: <font color=\"info\">{down_count}</font> 家！\n"
-                current_status["last_alert_down_level"] = down_count
-                notify = True
-            # 3. 在阈值之上，上涨超过上次提醒值 INCREMENT_THRESHOLD
-            elif down_count >= DOWN_THRESHOLD and down_count <= current_status["last_alert_down_level"] - INCREMENT_THRESHOLD:
-                msg += f"> **下跌回升**: <font color=\"info\">{down_count}</font> 家！\n"
-                current_status["last_alert_down_level"] = down_count
-                notify = True
-            # 4. 回落到阈值以下，重置状态
-            elif down_count < DOWN_THRESHOLD and current_status["last_alert_down_level"] != 0:
+            # 上涨预警逻辑
+            if up_count >= UP_THRESHOLD:
+                if current_status["last_alert_up_level"] == 0: # 首次突破
+                    msg += f"> **上涨突破**: <font color=\"warning\">{up_count}</font> 家！\n"
+                    current_status["last_alert_up_level"] = up_count
+                    notify = True
+                elif abs(up_count - current_status["last_alert_up_level"]) >= INCREMENT_THRESHOLD: # 增量/减量提醒
+                    msg += f"> **上涨变动**: <font color=\"warning\">{up_count}</font> 家！\n"
+                    current_status["last_alert_up_level"] = up_count
+                    notify = True
+            elif up_count < UP_THRESHOLD: # 回落重置
+                current_status["last_alert_up_level"] = 0
+
+            # 下跌预警逻辑
+            if down_count >= DOWN_THRESHOLD:
+                if current_status["last_alert_down_level"] == 0: # 首次突破
+                    msg += f"> **下跌突破**: <font color=\"info\">{down_count}</font> 家！\n"
+                    current_status["last_alert_down_level"] = down_count
+                    notify = True
+                elif abs(down_count - current_status["last_alert_down_level"]) >= INCREMENT_THRESHOLD: # 增量/减量提醒
+                    msg += f"> **下跌变动**: <font color=\"info\">{down_count}</font> 家！\n"
+                    current_status["last_alert_down_level"] = down_count
+                    notify = True
+            elif down_count < DOWN_THRESHOLD: # 回落重置
                 current_status["last_alert_down_level"] = 0
-                # 不发送通知，只是重置状态
             
             if notify:
-                print("触发预警通知：")
-                print(msg)
                 send_wechat_notification(msg, wechat_key)
-                save_status(current_status) # 保存更新后的状态
-            else:
-                print("未达到预警条件，不发送通知。")
-        else:
-            print("未能获取到数据，请检查网络或接口。")
+                save_status(current_status)
 
 if __name__ == "__main__":
     main()
