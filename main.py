@@ -83,8 +83,8 @@ def fetch_market_data():
         }
         res = requests.get(url, params=params, headers=headers, timeout=5).json()
         if res:
-            result["limit_up"] = res.get("limit_up_count", {}).get("num", 0)
-            result["limit_down"] = res.get("limit_down_count", {}).get("num", 0)
+            result["limit_up"] = res.get("data", {}).get("limit_up_count", {}).get("today", {}).get("num", 0)
+            result["limit_down"] = res.get("data", {}).get("limit_down_count", {}).get("today", {}).get("num", 0)
     except Exception as e:
         print("涨跌停接口失败:", e)
     # 3. 获取指数数据
