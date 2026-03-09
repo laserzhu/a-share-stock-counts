@@ -53,7 +53,6 @@ def fetch_market_data():
     }
 
     now = get_beijing_time()
-
     result = {
         "up": 0,
         "down": 0,
@@ -83,7 +82,7 @@ def fetch_market_data():
     except Exception as e:
         print("主接口失败:", e)
 
-    # 备用接口（防止返回0）
+    # 备用接口
     if result["up"] == 0 and result["down"] == 0:
         try:
             url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
@@ -147,12 +146,7 @@ def format_market_message(result):
     msg += "--------------------------------\n"
     for idx in result["indices"]:
         pct = idx["pct"] or 0
-        if pct > 0:
-            color = "warning"
-        elif pct < 0:
-            color = "info"
-        else:
-            color = "comment"
+        color = "warning" if pct > 0 else "info" if pct < 0 else "comment"
         msg += f"{idx['name']}: {idx['price']} (<font color=\"{color}\">{pct}%</font>)\n"
     msg += "--------------------------------\n"
     msg += f"查询时间: {result['date']}"
@@ -165,12 +159,10 @@ def send_wechat(msg, key):
     if "?key=" in key:
         key = key.split("?key=")[1]
     url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
-    payload = {
-        "msgtype": "markdown",
-        "markdown": {"content": msg}
-    }
+    payload = {"msgtype": "markdown", "markdown": {"content": msg}}
     try:
-        requests.post(url, json=payload, timeout=10)
+        res = requests.post(url, json=payload, timeout=10)
+        print("微信返回:", res.status_code, res.text)
     except Exception as e:
         print("发送失败:", e)
 
@@ -181,64 +173,45 @@ def main():
     key = os.environ.get("QYWECHAT_KEY")
     result = fetch_market_data()
 
-    # 打印调试
-    print("当前时间:", now)
-    print("GITHUB_EVENT_NAME =", event)
-    print("市场数据:", result)
-
-    # 手动触发或者自动调度统一逻辑
-    is_schedule = event == "schedule" or event == "workflow_dispatch" or event == "manual"
-
-    if not is_schedule:
-        print("未识别的触发事件，跳过发送")
-        return
-
-    # 自动调度判断交易时间
-    if event == "schedule" and not is_trading_time(now):
-        print("非交易时间，跳过发送")
-        return
-
-    status = load_status()
-    up = result["up"]
-    down = result["down"]
-
-    alert = ""
-    notify = False
-
-    # 上涨
-    if up >= UP_THRESHOLD:
-        if status["last_alert_up_level"] == 0:
-            alert += f"### 上涨预警\n> 上涨家数: <font color=\"warning\">{up}</font>\n\n"
-            status["last_alert_up_level"] = up
-            notify = True
-        elif abs(up - status["last_alert_up_level"]) >= INCREMENT_THRESHOLD:
-            alert += f"### 上涨变动\n> 上涨家数: <font color=\"warning\">{up}</font>\n\n"
-            status["last_alert_up_level"] = up
-            notify = True
-    else:
-        status["last_alert_up_level"] = 0
-
-    # 下跌
-    if down >= DOWN_THRESHOLD:
-        if status["last_alert_down_level"] == 0:
-            alert += f"### 下跌预警\n> 下跌家数: <font color=\"info\">{down}</font>\n\n"
-            status["last_alert_down_level"] = down
-            notify = True
-        elif abs(down - status["last_alert_down_level"]) >= INCREMENT_THRESHOLD:
-            alert += f"### 下跌变动\n> 下跌家数: <font color=\"info\">{down}</font>\n\n"
-            status["last_alert_down_level"] = down
-            notify = True
-    else:
-        status["last_alert_down_level"] = 0
-
-    # 发送消息
-    if notify:
-        msg = alert + format_market_message(result)
+    # 手动触发
+    if event in ["workflow_dispatch", "manual"]:
+        msg = format_market_message(result)
         send_wechat(msg, key)
-        save_status(status)
-        print("消息已发送")
-    else:
-        print("增量未达阈值，未发送消息")
+        return
+
+    # 自动监控
+    if event == "schedule":
+        if not is_trading_time(now):
+            return
+
+        status = load_status()
+        up = result["up"]
+        down = result["down"]
+        alert = ""
+        notify = False
+
+        # 上涨
+        if up >= UP_THRESHOLD:
+            if status["last_alert_up_level"] == 0 or abs(up - status["last_alert_up_level"]) >= INCREMENT_THRESHOLD:
+                alert += f"### 上涨预警\n> 上涨家数: <font color=\"warning\">{up}</font>\n\n"
+                status["last_alert_up_level"] = up
+                notify = True
+        else:
+            status["last_alert_up_level"] = 0
+
+        # 下跌
+        if down >= DOWN_THRESHOLD:
+            if status["last_alert_down_level"] == 0 or abs(down - status["last_alert_down_level"]) >= INCREMENT_THRESHOLD:
+                alert += f"### 下跌预警\n> 下跌家数: <font color=\"info\">{down}</font>\n\n"
+                status["last_alert_down_level"] = down
+                notify = True
+        else:
+            status["last_alert_down_level"] = 0
+
+        if notify:
+            msg = alert + format_market_message(result)
+            send_wechat(msg, key)
+            save_status(status)
 
 if __name__ == "__main__":
     main()
