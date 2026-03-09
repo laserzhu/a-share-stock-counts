@@ -3,6 +3,7 @@ import sys
 import subprocess
 from datetime import datetime, time, timedelta, timezone
 import json
+import re
 # 自动安装依赖
 def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
@@ -53,40 +54,26 @@ def fetch_market_data():
         "indices": [],
         "date": now.strftime("%Y-%m-%d %H:%M")
     }
-    # 1. 获取涨跌分布数据 (上涨/下跌/平盘)
+    # 1. 获取涨跌分布数据和涨跌停数据 from 同花顺官网页面
     try:
-        url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
-        params = {
-            "fltt": "2",
-            "secids": "1.000001,0.399001",
-            "fields": "f104,f105,f106",
-            "ut": "b2884a393a59ad64002292a3e90d46a5"
-        }
-        res = requests.get(url, params=params, headers=headers, timeout=5).json()
-        if res and "data" in res and "diff" in res["data"]:
-            for i in res["data"]["diff"]:
-                result["up"] += i.get("f104", 0)
-                result["down"] += i.get("f105", 0)
-                result["flat"] += i.get("f106", 0)
+        url = "https://q.10jqka.com.cn/"
+        res = requests.get(url, headers=headers, timeout=5)
+        text = res.text
+        up_match = re.search(r'上涨：(\d+)只', text)
+        down_match = re.search(r'下跌：(\d+)只', text)
+        limit_up_match = re.search(r'涨停：(\d+)只', text)
+        limit_down_match = re.search(r'跌停：(\d+)只', text)
+        if up_match:
+            result["up"] = int(up_match.group(1))
+        if down_match:
+            result["down"] = int(down_match.group(1))
+        result["flat"] = 0  # 同花顺页面未显示平盘家数，设为0
+        if limit_up_match:
+            result["limit_up"] = int(limit_up_match.group(1))
+        if limit_down_match:
+            result["limit_down"] = int(limit_down_match.group(1))
     except Exception as e:
-        print("涨跌分布接口失败:", e)
-    # 2. 获取涨跌停数据
-    try:
-        url = "https://data.10jqka.com.cn/dataapi/limit_up/limit_up_pool"
-        params = {
-            "page": "1",
-            "limit": "1",
-            "field": "199112,10,9001,330329,330325",
-            "filter": "HS,GEM2STAR",
-            "order_field": "330329",
-            "order_type": "0"
-        }
-        res = requests.get(url, params=params, headers=headers, timeout=5).json()
-        if res:
-            result["limit_up"] = res.get("data", {}).get("limit_up_count", {}).get("today", {}).get("num", 0)
-            result["limit_down"] = res.get("data", {}).get("limit_down_count", {}).get("today", {}).get("num", 0)
-    except Exception as e:
-        print("涨跌停接口失败:", e)
+        print("同花顺页面接口失败:", e)
     # 3. 获取指数数据
     try:
         url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
