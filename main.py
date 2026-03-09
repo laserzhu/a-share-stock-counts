@@ -149,7 +149,7 @@ def main():
         # 调整排版以实现对齐
         output = (
             f"涨: <font color=\"warning\">{up_val}</font>  |  跌: <font color=\"info\">{down_val}</font>  |  平: {flat_val}\n"
-            f"总计家数: {result["up"] + result["down"] + result["flat"]}\n"
+            f"总计家数: {result['up'] + result['down'] + result['flat']}\n"
             f"涨停: <font color=\"warning\">{limit_up_val}</font> |  跌停: <font color=\"info\">{limit_down_val}</font> |\n"
             f"--------------------------------\n"
         )
@@ -157,16 +157,16 @@ def main():
         index_text = ""
         for idx in result["indices"]:
             color = "warning" if (idx["pct"] or 0) > 0 else "info" if (idx["pct"] or 0) < 0 else "comment"
-            index_text += f"{idx["name"]}: {idx["price"]} (<font color=\"{color}\">{idx["pct"]}%</font>)\n"
+            index_text += f"{idx['name']}: {idx['price']} (<font color=\"{color}\">{idx['pct']}%</font>)\n"
         index_text += f"--------------------------------\n"
         
         trading_day_info = ""
         if not is_trading_time(now_bj):
-            trading_day_info = f"提示: 今天 ({now_bj.strftime("%Y-%m-%d")}) 是非交易日，显示上一个交易日数据。\n"
+            trading_day_info = f"提示: 今天 ({now_bj.strftime('%Y-%m-%d')}) 是非交易日，显示上一个交易日数据。\n"
         
         footer = (
             f"{trading_day_info}"
-            f"查询时间: {result["date"]}"
+            f"查询时间: {result['date']}"
         )
         
         send_wechat_notification(f"{output}{index_text}{footer}", wechat_key)
@@ -177,7 +177,7 @@ def main():
         result = fetch_market_data()
         if result:
             up_count, down_count = result["up"], result["down"]
-            msg = f"### A股情绪监测 ({result["date"]})\n"
+            msg = f"### A股情绪监测 ({result['date']})\n"
             notify = False
 
             # 上涨预警逻辑
