@@ -1,20 +1,17 @@
 name: 监测A股大盘行情
-# 強制重新註冊 schedule - debug resync 2026-03-10（已看社区评论，按 Staff 方案操作）
 
 on:
   workflow_dispatch: # 支持手动触发
-  push:              # ←←← 临时加这 3 行（来自社区评论，最有效唤醒 scheduler）
-    branches: [master]
   schedule:
-    # 每个工作日北京时间 09:00 到 15:00 之间，每 5 分钟运行一次（GitHub 最低间隔）
+    # 每个工作日北京时间 09:00 到 15:00 之间，每 5 分钟运行一次（错开分钟避开高峰）
     # 对应 UTC 时间 01:00 到 07:00
-    # 2026.3.10 已激活定时任务（master 分支专用最终版）
-    - cron: '*/5 1-7 * * 1-5'
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 1-7 * * 1-5'
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 允许写入文件，用于保存 status.json
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
