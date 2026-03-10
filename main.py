@@ -20,9 +20,9 @@ def get_beijing_time():
     tz = timezone(timedelta(hours=8))
     return datetime.now(tz)
 # 预警参数
-UP_THRESHOLD = 3500
-DOWN_THRESHOLD = 3500
-INCREMENT_THRESHOLD = 250
+UP_THRESHOLD = 1000
+DOWN_THRESHOLD = 1000
+INCREMENT_THRESHOLD = 1
 STATUS_FILE = "status.json"
 # 状态读取
 def load_status():
