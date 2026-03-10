@@ -19,24 +19,6 @@ except ImportError:
 def get_beijing_time():
     tz = timezone(timedelta(hours=8))
     return datetime.now(tz)
-# 预警参数
-UP_THRESHOLD = 1000
-DOWN_THRESHOLD = 1000
-INCREMENT_THRESHOLD = 1
-STATUS_FILE = "status.json"
-# 状态读取
-def load_status():
-    if os.path.exists(STATUS_FILE):
-        try:
-            with open(STATUS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            pass
-    return {"last_alert_up_level": 0, "last_alert_down_level": 0}
-# 保存状态
-def save_status(status):
-    with open(STATUS_FILE, "w", encoding="utf-8") as f:
-        json.dump(status, f, ensure_ascii=False, indent=2)
 # 获取市场数据
 def fetch_market_data():
     headers = {
@@ -166,30 +148,8 @@ def main():
     if event == "schedule":
         if not is_trading_time(now):
             return
-        status = load_status()
-        up = result["up"]
-        down = result["down"]
-        alert = ""
-        notify = False
-        # 上涨预警
-        up_level = up // INCREMENT_THRESHOLD
-        if up >= UP_THRESHOLD and up_level > status["last_alert_up_level"]:
-            alert += f"### **<font color=\"warning\">📈 上涨家数突破 {up_level * INCREMENT_THRESHOLD}</font>**\n"
-            status["last_alert_up_level"] = up_level
-            notify = True
-        elif up < UP_THRESHOLD:
-            status["last_alert_up_level"] = 0
-        # 下跌预警
-        down_level = down // INCREMENT_THRESHOLD
-        if down >= DOWN_THRESHOLD and down_level > status["last_alert_down_level"]:
-            alert += f"### **<font color=\"info\">📉 下跌家数突破 {down_level * INCREMENT_THRESHOLD}</font>**\n"
-            status["last_alert_down_level"] = down_level
-            notify = True
-        elif down < DOWN_THRESHOLD:
-            status["last_alert_down_level"] = 0
-        if notify:
-            msg = alert + "\n" + format_market_message(result)
-            send_wechat(msg, key)
-            save_status(status)
+        # 每次直接发送完整消息，无预警逻辑
+        msg = format_market_message(result)
+        send_wechat(msg, key)
 if __name__ == "__main__":
     main()
